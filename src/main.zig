@@ -179,7 +179,7 @@ pub fn main() !void {
 
     try listener.listen();
 
-    std.debug.print("\x1b[2K\rServe on http://0.0.0.0:8080", .{});
+    std.debug.print("\x1b[2K\rServe on http://{s}:{d}\n", .{ listener.settings.interface, listener.settings.port });
 
     zap.start(.{ .threads = 8, .workers = 8 });
 }
