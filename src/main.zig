@@ -41,14 +41,14 @@ pub fn homepage(req: zap.SimpleRequest) void {
     var filelines = std.mem.tokenizeSequence(u8, file_content, "\n");
 
     var linkarray = std.ArrayList(u8).init(alloc);
+    defer linkarray.deinit();
+
     var writer =
         linkarray.writer();
 
     writer.writeAll(header) catch {
         return;
     };
-
-    defer linkarray.deinit();
 
     while (filelines.next()) |lines| {
         if (lines.len == 0) continue;
