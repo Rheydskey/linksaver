@@ -6,8 +6,6 @@ var Alloc =
 
 const FILE_PATH = "./linksaved";
 
-var routes: std.StringHashMap(zap.SimpleHttpRequestFn) = undefined;
-
 pub fn homepage(req: zap.SimpleRequest) void {
     var alloc = Alloc.allocator();
 
@@ -155,14 +153,9 @@ pub fn savelink(req: zap.SimpleRequest) void {
     req.setHeader("location", "/") catch {};
 }
 
-pub fn setup_routes(a: std.mem.Allocator) !void {
-    routes = std.StringHashMap(zap.SimpleHttpRequestFn).init(a);
-
-    try routes.put("/", homepage);
-    try routes.put("/save", savelink);
-}
-
 pub fn dispatch_routes(req: zap.SimpleRequest) void {
+    const routes = std.ComptimeStringMap(zap.SimpleHttpRequestFn, .{ .{ "/", homepage }, .{ "/save", savelink } });
+
     if (req.path) |path| {
         if (routes.get(path)) |handler| {
             return handler(req);
@@ -173,8 +166,6 @@ pub fn dispatch_routes(req: zap.SimpleRequest) void {
 }
 
 pub fn main() !void {
-    _ = try setup_routes(std.heap.page_allocator);
-
     var createfile = std.fs.cwd().createFile(FILE_PATH, std.fs.File.CreateFlags{ .truncate = false }) catch |ee| {
         std.debug.panic("error : {any}", .{ee});
         return null;
