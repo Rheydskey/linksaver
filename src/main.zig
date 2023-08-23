@@ -146,9 +146,12 @@ pub fn savelink(req: zap.SimpleRequest) void {
         return;
     };
 
+    defer create_file.close();
+
     create_file.writeAll(file_content) catch |write_err| {
         std.log.err("Error {any}", .{write_err});
     };
+
     req.setStatus(zap.StatusCode.found);
     req.setHeader("location", "/") catch {};
 }
