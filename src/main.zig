@@ -175,7 +175,7 @@ pub fn main() !void {
     };
 
     createfile.close();
-    var listener = zap.SimpleHttpListener.init(.{ .port = 8080, .on_request = dispatch_routes, .log = true });
+    var listener = zap.SimpleHttpListener.init(.{ .interface = "0.0.0.0", .port = 8080, .on_request = dispatch_routes, .log = true });
 
     try listener.listen();
 
