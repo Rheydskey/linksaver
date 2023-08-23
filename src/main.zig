@@ -181,5 +181,5 @@ pub fn main() !void {
 
     std.debug.print("\x1b[2K\rServe on http://{s}:{d}\n", .{ listener.settings.interface, listener.settings.port });
 
-    zap.start(.{ .threads = 8, .workers = 8 });
+    zap.start(.{ .threads = 2, .workers = 2 });
 }
