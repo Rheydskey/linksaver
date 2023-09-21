@@ -6,41 +6,37 @@ var Alloc =
 
 const FILE_PATH = "./linksaved";
 
-pub fn makeResponse(filelines: *std.mem.TokenIterator(u8, std.mem.DelimiterType.sequence), alloc: *std.mem.Allocator) !std.ArrayList(u8).Slice {
-    const header =
-        \\<html>
-        \\<body>
-        \\ <h1>LinkSaver</h1>
-        \\ <form action='/save' method="POST">
-        \\    <input type="text" name="link" placeholder="ur link">
-        \\    <input type="submit">
-        \\ </form>
-    ;
-
-    const bottom =
-        \\</body>
-        \\</html>
-    ;
-
+pub fn makeResponse(file_name: *[]const u8, filelines: *std.mem.TokenIterator(u8, std.mem.DelimiterType.sequence), alloc: *std.mem.Allocator) !std.ArrayList(u8).Slice {
     var linkarray = std.ArrayList(u8).init(alloc.*);
 
     var writer =
         linkarray.writer();
 
-    try writer.writeAll(header);
+    try writer.print(
+        \\<html>
+        \\<body>
+        \\ <h1>LinkSaver</h1>
+        \\ <form action='/save/{s}' method="POST">
+        \\    <input type="text" name="link" placeholder="ur link">
+        \\    <input type="submit">
+        \\ </form>
+    , .{file_name.*});
 
     while (filelines.next()) |lines| {
         if (lines.len == 0) continue;
         try writer.print("<a href=\"{0s}\">{0s}</a> <br/>", .{lines});
     }
 
-    try writer.writeAll(bottom);
+    try writer.writeAll(
+        \\</body>
+        \\</html>
+    );
 
     return try linkarray.toOwnedSlice();
 }
 
-pub fn readToEndFromFile(alloc: *std.mem.Allocator) ![]u8 {
-    var read_file: std.fs.File = try std.fs.cwd().openFile(FILE_PATH, .{ .mode = std.fs.File.OpenMode.read_only });
+pub fn readToEndFromFile(file_name: *[]const u8, alloc: *std.mem.Allocator) ![]u8 {
+    var read_file: std.fs.File = try std.fs.cwd().openFile(file_name.*, .{ .mode = std.fs.File.OpenMode.read_only });
 
     defer read_file.close();
 
@@ -49,11 +45,47 @@ pub fn readToEndFromFile(alloc: *std.mem.Allocator) ![]u8 {
     return file_content;
 }
 
+pub fn createOrReadToEnd(file_name: *[]const u8, alloc: *std.mem.Allocator) ![]u8 {
+    var tryfile =
+        std.fs.cwd().openFile(file_name.*, .{});
+    if (tryfile == std.fs.File.OpenError.FileNotFound) {
+        var file = try std.fs.cwd().createFile(file_name.*, std.fs.File.CreateFlags{ .read = true });
+        file.close();
+    }
+
+    return readToEndFromFile(file_name, alloc);
+}
+
+pub fn getFileName(req: *const zap.SimpleRequest, trim_path: []const u8) ?[]const u8 {
+    var path = req.path orelse {
+        return null;
+    };
+
+    if (std.mem.startsWith(u8, path, trim_path)) {
+        path = path[trim_path.len..];
+    }
+
+    var token = std.mem.split(u8, path, "/");
+
+    _ =
+        token.next();
+
+    var file = token.next() orelse {
+        return null;
+    };
+
+    if (file.len == 0) {
+        file = FILE_PATH;
+    }
+
+    return file;
+}
+
 pub fn homepage(req: zap.SimpleRequest) void {
     var alloc = Alloc.allocator();
-
-    var file_content = readToEndFromFile(&alloc) catch |err| {
-        std.log.err("{}", .{err});
+    var file_name = getFileName(&req, "") orelse FILE_PATH;
+    var file_content = createOrReadToEnd(&file_name, &alloc) catch |err| {
+        std.log.err("Cannot open {s} : {}", .{ file_name, err });
         req.setStatus(zap.StatusCode.internal_server_error);
         return;
     };
@@ -62,7 +94,7 @@ pub fn homepage(req: zap.SimpleRequest) void {
 
     var filelines = std.mem.tokenizeSequence(u8, file_content, "\n");
 
-    var res = makeResponse(&filelines, &alloc) catch |err| {
+    var res = makeResponse(&file_name, &filelines, &alloc) catch |err| {
         std.debug.print("{}", .{err});
         return;
     };
@@ -70,16 +102,6 @@ pub fn homepage(req: zap.SimpleRequest) void {
     defer alloc.free(res);
 
     req.sendBody(res) catch return;
-}
-
-pub fn checkMethod(req: *const zap.SimpleRequest, cmp_method: []const u8) !void {
-    if (req.*.method) |method| {
-        if (!std.mem.eql(u8, method, cmp_method)) {
-            req.setStatus(zap.StatusCode.method_not_allowed);
-            try req.sendBody("Wrong method");
-            return error.MethodNotAllowed;
-        }
-    }
 }
 
 pub fn parseBody(req: *const zap.SimpleRequest) !void {
@@ -92,8 +114,8 @@ pub fn parseBody(req: *const zap.SimpleRequest) !void {
     try req.sendBody("No body");
 }
 
-pub fn addLinkToFile(link: *[]const u8, alloc: *std.mem.Allocator) !void {
-    const file: std.fs.File = try std.fs.cwd().openFile(FILE_PATH, .{
+pub fn addLinkToFile(file_name: *[]const u8, link: *[]const u8, alloc: *std.mem.Allocator) !void {
+    const file: std.fs.File = try std.fs.cwd().openFile(file_name.*, .{
         .mode = std.fs.File.OpenMode.read_write,
     });
 
@@ -106,23 +128,17 @@ pub fn addLinkToFile(link: *[]const u8, alloc: *std.mem.Allocator) !void {
 
     var file_content = try file_array.toOwnedSlice();
 
-    var create_file = try std.fs.cwd().createFile(FILE_PATH, std.fs.File.CreateFlags{});
+    var create_file = try std.fs.cwd().createFile(file_name.*, std.fs.File.CreateFlags{});
 
     defer create_file.close();
 
     try create_file.writeAll(file_content);
 }
 
-pub fn savelink(req: zap.SimpleRequest) void {
-    checkMethod(&req, "POST") catch |err| {
-        std.log.err("{}", .{err});
-        return;
-    };
+pub fn savelink(req: zap.SimpleRequest) !void {
+    try parseBody(&req);
 
-    parseBody(&req) catch |err| {
-        std.log.err("{?}", .{err});
-        return;
-    };
+    var file_name = getFileName(&req, "/save") orelse FILE_PATH;
 
     var alloc = Alloc.allocator();
 
@@ -148,22 +164,37 @@ pub fn savelink(req: zap.SimpleRequest) void {
 
     defer link.deinit();
 
-    addLinkToFile(&link.str, &alloc) catch |err| {
+    addLinkToFile(&file_name, &link.str, &alloc) catch |err| {
         std.log.err("{}", .{err});
         req.setStatus(zap.StatusCode.internal_server_error);
         return;
     };
 
     req.setStatus(zap.StatusCode.found);
-    req.setHeader("location", "/") catch {};
+
+    var buffer = std.ArrayList(u8).init(alloc);
+
+    try buffer.appendSlice("/");
+    try buffer.appendSlice(file_name);
+
+    try req.setHeader("location", try buffer.toOwnedSlice());
 }
 
 pub fn dispatch_routes(req: zap.SimpleRequest) void {
-    const routes = std.ComptimeStringMap(zap.SimpleHttpRequestFn, .{ .{ "/", homepage }, .{ "/save", savelink } });
-
     if (req.path) |path| {
-        if (routes.get(path)) |handler| {
-            return handler(req);
+        _ = path;
+        var method = req.method orelse {
+            return;
+        };
+
+        if (std.mem.eql(u8, "GET", method) or std.mem.eql(u8, "get", method)) {
+            return homepage(req);
+        }
+
+        if (std.mem.eql(u8, "POST", method) or std.mem.eql(u8, "post", method)) {
+            return savelink(req) catch |err| {
+                std.debug.print("Error: {}", .{err});
+            };
         }
     }
 

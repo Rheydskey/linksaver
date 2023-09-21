@@ -5,8 +5,8 @@
     .dependencies = .{
         // zap v0.1.10-pre
         .zap = .{
-            .url = "https://github.com/zigzap/zap/archive/refs/tags/v0.1.10-pre.tar.gz",
-            .hash = "1220a645e8ae84064f3342609f65d1c97e23c292616f5d1040cdf314ca52d7643f8a",
+            .url = "https://github.com/zigzap/zap/archive/refs/tags/v0.1.14-pre.tar.gz",
+            .hash = "122067d12bc7abb93f7ce623f61b94cadfdb180cef12da6559d092e6b374202acda3",
         }
     }
 }
